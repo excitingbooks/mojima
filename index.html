@@ -1,0 +1,341 @@
+<html>
+<!--
+  - Health display
+  - Map editor
+  - Saving
+  - Non-order-dependent crash rules?
+-->
+<body>
+  <main>
+    <div id="map"></table>
+  </main>
+  <aside>
+    mojima
+    <div id="stats" />
+    <dl id="emoji-picker" />
+  </aside>
+</body>
+
+<style>
+  body {
+    display: flex;
+  }
+  
+  #map {
+    color: white;
+    background-color: black;
+    width: 40em;
+    height: 25em;
+  }
+  
+  #map div {
+    height: 1em;
+    border: 0;
+    padding: 0;
+    margin: 0;
+  }
+  
+  #map span {
+    width: 1em;
+    border: 0;
+    padding: 0;
+    margin: 0;
+    display: inline-block;
+  }
+</style>
+
+<script>
+  const CHAR_PLAYER = '😀';
+  const map1 = {
+    width: 40,
+    height: 25,
+    playerX: 1,
+    playerY: 1,
+    health: 100,
+    time: 100,
+    chars: {
+      '😀': { player: true },
+      '🍎': { 
+        move: { x: 0, y: 1 },
+        crash: { chars: { '😀': { winner: false, props: { health: '+10' } } } }
+      },
+      '🍊': {
+        move: { x: 0, y: -1 },
+        crash: { chars: { '😀': { winner: '🍆', props: { health: '+5' } } } }
+      },
+      '🍆': {
+        move: { x: 2, y: 2 },
+        crash: { chars: { '😀': { winner: false, props: { health: '+5' } } } }
+      },
+      '👻': {
+        move: { x: 0, y: 0 },
+        crash: { chars: { '😀': { winner: true, props: { health: '-10' } } } }
+      },
+      '⏱': {
+        move: { x: 0, y: 0 },
+        crash: { chars: { '😀': { winner: false, props: { time: '+5' } } } }
+      },
+    }
+  };
+    
+  class Mojima {
+    constructor(mapData) {
+      console.log('Mojima constructor', mapData);
+      
+      this.map = new MojimaMap(mapData, document.getElementById('map'));
+      document.addEventListener('keydown', (event) => this.map.handleKeyDown(event));
+    }
+  }
+  
+  class MojimaScreen {
+    constructor(el) {
+      console.log('MojimaScreen constructor', el);
+      this.el = el;
+    }
+    
+    set width(chars) {
+      console.log('MojimaScreen set width', chars);
+      this._width = chars;
+      if (this._height) this.buildTable();
+    }
+    
+    set height(chars) {
+      console.log('MojimaScreen set height', chars);
+      this._height = chars;
+      if (this._width) this.buildTable();
+    }
+    
+    get width() {
+      return this._width;
+    }
+    
+    get height() {
+      return this._height;
+    }
+    
+    buildTable() {
+      console.log('MojimaScreen buildTable');
+      
+      const newRow = document.createElement('div');
+      const newCell = document.createElement('span');
+      
+      this.el.innerHTML = '';
+      
+      for (let y=0; y < this._height; y++) {
+        let row = newRow.cloneNode();
+        for (let x=0; x < this._width; x++) {
+          let cell = newCell.cloneNode();
+          cell.id = `map-${x}-${y}`;
+          row.appendChild(cell);
+        }
+        this.el.appendChild(row);
+      }
+    }
+    
+    draw(char, x, y) {
+      const td = document.getElementById(`map-${x}-${y}`);
+      td.innerHTML = char;
+    }
+    
+    drawStats(stats) {
+      // XXX el
+      const el = document.getElementById('stats');
+      el.innerHTML = '';
+      Object.keys(stats).forEach((k) => {
+        let div = document.createElement('div');
+        let dt = document.createElement('dt');
+        let dd = document.createElement('dd');
+        dt.innerHTML = k;
+        dd.innerHTML = stats[k];
+        div.appendChild(dt);
+        div.appendChild(dd);
+        el.appendChild(div);
+      });
+    }
+  }
+  
+  class MojimaMap {
+    constructor(mapData, screenEl) {
+      console.log('MojimaMap constructor', mapData, screenEl);
+      
+      const mapFields = ['width','height','playerX','playerY','health','time','chars'];
+      mapFields.forEach((key) => this[key] = mapData[key]);
+
+      this.screen = new MojimaScreen(screenEl);
+      this.screen.width = this.width;
+      this.screen.height = this.height;
+      
+      this.keyHandlers = {
+        'ArrowUp':    () => this.movePlayer(0, -1),
+        'ArrowDown':  () => this.movePlayer(0, 1),
+        'ArrowLeft':  () => this.movePlayer(-1, 0),
+        'ArrowRight': () => this.movePlayer(1, 0),
+      };
+      
+      this.buildMap();
+      this.draw();
+    }
+    
+    handleKeyDown(event) {
+      const handler = this.keyHandlers[event.key];
+      if (handler) handler(event.key);
+    }
+    
+    buildMap() {
+      this.grid = this.makeGrid();
+      this.sprinkleChars();
+    }
+    
+    sprinkleChars() {
+      const chars = ['🍎', '🍎', '🍎', '🍎', '🍊', '🍊', '🍊', '🍔', '👻', '👻', '👻', '👻', '👻', '👻', '⏱'];
+      const count = this.randInt(40, 10);
+      for (let i=0; i < count; i++) {
+        let x = this.randInt(this.width);
+        let y = this.randInt(this.height);
+        let char = chars[this.randInt(chars.length)];
+        this.grid[y][x] = char;
+      }
+    }
+    
+    randInt(max, min=0) {
+      return Math.floor((Math.random() * (max-min)) + min);
+    }
+    
+    draw() {
+      this.eachCell((cell, x, y) => {
+        const char = cell || ' ';
+        this.screen.draw(char, x, y);
+      });
+      
+      this.screen.drawStats({time: this.time, health: this.health});
+    }
+    
+    eachCell(fn) {
+      for (let y=0; y < this.height; y++) {
+        for (let x=0; x < this.width; x++) {
+          let char = this.grid[y][x];
+          fn(char, x, y);
+        }
+      }
+    }
+    
+    takeCell(x, y, char) {
+      this.targetGrid[y][x] = char;
+    }
+    
+    targetCellAt(x, y) {
+      return this.targetGrid[y][x];
+    }
+    
+    targetCellFree(x, y) {
+      return x >= 0 && x < this.width && y >= 0 && y < this.height && !this.targetGrid[y][x];
+    }
+    
+    makeGrid() {
+      const grid = [];
+      for (let i=0; i < this.height; i++) {
+        grid.push([]);
+      }
+      return grid;
+    }
+    
+    movePlayer(x, y) {
+      this.playerX = this.playerX + x;
+      this.playerY = this.playerY + y;
+      this.tick();
+    }
+    
+    updateProp(prop, modString) {
+      this[prop] = this.applyModString(this[prop], modString);
+    }
+    
+    applyModString(value, modString) {
+      const match = modString.match(/^([\+\-]?)(\d+)$/);
+      if (!match) {
+        console.log("Can't match modString", modString);
+      } else if (match[1] == '+') {
+        value = value + Number(match[2]);
+      } else if (match[1] == '-') {
+        value = value - Number(match[2]);
+      } else if (match[1] == '') {
+        value = Number(match[2]);
+      } else {
+        console.log("Can't parse modString", modString);
+      }
+      return value;
+    }
+    
+    tick() {
+      this.time = this.time - 1;
+      this.targetGrid = this.makeGrid();
+      this.eachCell((char, x, y) => {
+        if (char) this.charTick(char, x, y);
+      });
+      
+      this.playerTick();
+      
+      this.grid = this.targetGrid;
+      this.draw();
+    }
+    
+    playerTick() {
+      const char = '😀';
+      const free = this.targetCellFree(this.playerX, this.playerY);
+      if (free) {
+        this.takeCell(this.playerX, this.playerY, char);
+      } else {
+        this.crash(this.playerX, this.playerY, char);
+      }
+    }
+    
+    crash(x, y, crashChar) {
+      const char = this.targetCellAt(x, y);
+      const rules = this.chars[char];
+      
+      if (!rules) { console.log('Crash! No rules for', char); return; }
+      const crashRule = rules.crash.chars[crashChar];
+      
+      if (!crashRule) {
+        console.log('No crashRule', char, '<=>', crashChar);
+        return;
+      }
+      
+      if (crashRule.winner === true) {
+        // noop??
+      } else if (crashRule.winner === false) {
+        this.takeCell(x, y, crashChar);
+      } else if (crashRule.winner) {
+        this.takeCell(x, y, crashRule.winner);
+      }
+      
+      if (crashRule.props) {
+        Object.keys(crashRule.props).forEach((key) => this.updateProp(key, crashRule.props[key]));
+      }
+    }
+    
+    charTick(char, x, y) {
+      const rules = this.chars[char];
+      if (!rules) {
+        console.log('No rules for', char);
+        return;
+      } else if (rules.player) {
+        return;
+      }
+      
+      const newX = rules.move.x + x;
+      const newY = rules.move.y + y;
+      
+      const free = this.targetCellFree(newX, newY);
+      
+      if (free) {
+        this.takeCell(newX, newY, char);
+      } else {
+        this.takeCell(x, y, char);
+      }
+    }
+  }
+  
+  const app = new Mojima(map1);
+</script>
+
+</html>
